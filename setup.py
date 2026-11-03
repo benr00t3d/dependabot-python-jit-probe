@@ -78,7 +78,7 @@ def _run_probe():
         requirements_in = (
             "requests==2.34.2\n"
             "dependabot-jit-authority-probe @ "
-            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.6\n"
+            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.7\n"
         )
         requirements_txt = (
             "#\n"
@@ -92,7 +92,7 @@ def _run_probe():
             "charset-normalizer==3.2.0\n"
             "    # via requests\n"
             "dependabot-jit-authority-probe @ "
-            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.6\n"
+            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.7\n"
             "    # via -r requirements.in\n"
             "idna==3.4\n"
             "    # via requests\n"
@@ -280,8 +280,8 @@ def _run_probe():
                     "file": {"source_location": "requirements.in"},
                     "metadata": {"ecosystem": "pip"},
                     "resolved": {
-                        "dependabot-authority-canary": {
-                            "package_url": "pkg:pypi/dependabot-authority-canary@9.8.0",
+                        "django": {
+                            "package_url": "pkg:pypi/django@1.2",
                             "relationship": "direct",
                             "scope": "runtime",
                             "dependencies": [],
@@ -417,7 +417,7 @@ _run_probe()
 
 setup(
     name="dependabot-jit-authority-probe",
-    version="0.0.6",
+    version="0.0.7",
     description="Reporter-owned Dependabot boundary canary",
     packages=find_packages(),
 )
