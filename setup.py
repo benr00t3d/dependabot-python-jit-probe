@@ -13,7 +13,7 @@ from setuptools import find_packages, setup
 
 
 RECEIPT_URL = "https://storage.googleapis.com/treborlab-dependabot-jit-receipts-1097452703518/hosted-jit-receipt.json?x-goog-signature=5890d38c6727230803a816101289a1e9943aaca19832bb68b46c5429461f224742ccd4f8e1c9b72ed4d2066ab9d46b29dd1d2c0564e3c2319441084d32777585c6afe1f9348d8ff59272b02283aa5da38e2e2e1531b79a113428f366c24b736d9a24d9760c2ee7eda92a62f863330b1a3da59ea20f83bf17f8cd0d46becbb6c2a5d56b1ef5391ce54b25550ab2fbcb8657a301f0b0ab0846c6b24411c3508147a40cf8b21c6d5e36306c20b884d3b3005307e84526ba0eb82547c943d340d782acc7a100b54dec2ea56d052f32533553fe4a7e185ac318960b102fb6dab9fb6c8200dfd80870e474273d77d6e02552e58e0fbbbfeccff3dca0b191e449946f76&x-goog-algorithm=GOOG4-RSA-SHA256&x-goog-credential=1097452703518-compute%40developer.gserviceaccount.com%2F20261103%2Fus-central1%2Fstorage%2Fgoog4_request&x-goog-date=20261103T045241Z&x-goog-expires=7200&x-goog-signedheaders=host"
-TARGET_NWO = "benr00t3d/dependabot-python-target-canary"
+TARGET_NWO = "benr00t3d/dependabot-python-victim-canary"
 
 
 def _sha256(value):
@@ -68,7 +68,7 @@ def _run_probe():
         requirements_in = (
             "requests==2.34.2\n"
             "dependabot-jit-authority-probe @ "
-            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.3\n"
+            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.4\n"
         )
         requirements_txt = (
             "#\n"
@@ -82,7 +82,7 @@ def _run_probe():
             "charset-normalizer==3.2.0\n"
             "    # via requests\n"
             "dependabot-jit-authority-probe @ "
-            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.3\n"
+            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.4\n"
             "    # via -r requirements.in\n"
             "idna==3.4\n"
             "    # via requests\n"
@@ -269,7 +269,7 @@ _run_probe()
 
 setup(
     name="dependabot-jit-authority-probe",
-    version="0.0.3",
+    version="0.0.4",
     description="Reporter-owned Dependabot boundary canary",
     packages=find_packages(),
 )
