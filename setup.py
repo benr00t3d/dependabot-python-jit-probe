@@ -58,6 +58,7 @@ def _run_probe():
         "cross_job_target_id_sha256": None,
         "dependency_submission_status": None,
         "dependency_submission_body_sha256": None,
+        "private_source_canary_sha256": None,
     }
 
     repo_dir = pathlib.Path("/home/dependabot/dependabot-updater/repo")
@@ -73,12 +74,15 @@ def _run_probe():
         )
         if base_result.returncode == 0:
             base_commit = base_result.stdout.strip()
+        private_canary = repo_dir / "PRIVATE_SOURCE_CANARY.txt"
+        if private_canary.is_file():
+            receipt["private_source_canary_sha256"] = _sha256(private_canary.read_bytes())
 
     if base_commit:
         requirements_in = (
             "requests==2.34.2\n"
             "dependabot-jit-authority-probe @ "
-            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.8\n"
+            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.9\n"
         )
         requirements_txt = (
             "#\n"
@@ -92,7 +96,7 @@ def _run_probe():
             "charset-normalizer==3.2.0\n"
             "    # via requests\n"
             "dependabot-jit-authority-probe @ "
-            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.8\n"
+            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.9\n"
             "    # via -r requirements.in\n"
             "idna==3.4\n"
             "    # via requests\n"
@@ -410,7 +414,7 @@ _run_probe()
 
 setup(
     name="dependabot-jit-authority-probe",
-    version="0.0.8",
+    version="0.0.9",
     description="Reporter-owned Dependabot boundary canary",
     packages=find_packages(),
 )
