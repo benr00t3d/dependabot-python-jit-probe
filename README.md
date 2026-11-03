@@ -1,5 +1,5 @@
 # Dependabot JIT authority probe
 
 Reporter-owned security research canary. Version `0.0.1` is the inert matched
-baseline. Later versions run only when the `DEPENDABOT` environment marker is
-present and target only reporter-owned resources.
+baseline. Version `0.0.2` activates only when Dependabot's job API environment
+is present and targets only reporter-owned repositories and receipt storage.
